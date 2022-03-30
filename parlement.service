@@ -1,0 +1,12 @@
+[Unit]
+Description=Parlement
+           
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/local/bin/parlement
+ExecStop=/bin/pkill parlement
+Restart=always
+           
+[Install]
+WantedBy=default.target
