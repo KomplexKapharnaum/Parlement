@@ -1,6 +1,6 @@
-from sre_parse import State
 import paho.mqtt.client as mqtt 
-import time
+import liblo
+import time, sys
 from enum import Enum
 
 memSablier = 2
@@ -21,6 +21,8 @@ def setState(s):
     global state
     state = s
     print("- ", s)
+    
+
 
 ######## MQTT
 
@@ -56,11 +58,13 @@ def on_message(client, userdata, message):
         setState(States.BUZZED)
         leader = int(message.payload)
         client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)
+        m32_open(leader)
         print("k32/l"+str(leader)+"/leds/mem", "1")
         
         for i in range(1,4):
             if i != leader:
                 client.publish("k32/l"+str(i)+"/leds/mem", "0", qos=1)
+                m32_mute(i)
                 print("k32/l"+str(i)+"/leds/mem", "0")
                         
     # END
@@ -78,6 +82,25 @@ def on_message(client, userdata, message):
         if s == 2: memSablier = 4   # C16 @2 = Speed 1m
         if s == 3: memSablier = 5   # C16 @3 = Speed 0m30
         
+
+######### OSC
+try:
+    m32 = liblo.Address("osc.udp://10.0.1.70:10023/")
+except liblo.AddressError as err:
+    print(err)
+    time.sleep(3)
+    sys.exit()
+    
+def m32_mute(ch=None):
+    if ch:
+        liblo.send(m32, "/ch/"+str(ch)+"/mix/on", 0)
+    else:
+        liblo.send(m32, "/ch/1/mix/on", 0)
+        liblo.send(m32, "/ch/2/mix/on", 0)
+        liblo.send(m32, "/ch/3/mix/on", 0)
+        
+def m32_open(ch):
+    liblo.send(m32, "/ch/"+str(ch)+"/mix/on", 1)
 
 
 ######### MAIN LOOP
@@ -97,6 +120,7 @@ while True:
         time.sleep(.5)
         
     elif state == States.START:
+        m32_mute()
         client.publish("k32/all/leds/mem", "0", qos=1)
         time.sleep(1)
         setState(States.READY)
