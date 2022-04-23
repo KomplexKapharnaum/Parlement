@@ -64,17 +64,18 @@ def on_message(client, userdata, message):
         setState(States.BUZZED)
         leader = int(message.payload)
         m32_open(leader)
-        client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)
+        client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)     # Leader -> white
         print("k32/l"+str(leader)+"/leds/mem", "1")
         
         for i in range(1,buzzersCount+1):
             if i != leader:
-                client.publish("k32/l"+str(i)+"/leds/mem", "0", qos=1)
+                client.publish("k32/l"+str(i)+"/leds/mem", "0", qos=1)  # Non-Leader -> blue 
                 m32_mute(i)
                 print("k32/l"+str(i)+"/leds/mem", "0")
                         
     # END
     if message.topic.startswith("k32/event/sablier") and state == States.CHRONO:
+        client.publish("k32/all/leds/mem", "2", qos=1) # RED breath
         setState(States.READY)
         
     # QUIZZ CTRL
@@ -84,7 +85,7 @@ def on_message(client, userdata, message):
         if s == 0:                  # C16 @0 = Stop
             setState(States.START)
             
-        if s == 1: memSablier = 2   # C16 @1 = Speed 45
+        if s == 1: memSablier = 3   # C16 @1 = Speed 45
         if s == 2: memSablier = 4   # C16 @2 = Speed 30
         if s == 3: memSablier = 5   # C16 @3 = Speed 18
         if s == 4: memSablier = 6   # C16 @3 = Speed 9
@@ -152,6 +153,7 @@ while True:
         setState(States.CHRONO)
         client.publish("k32/c1/leds/mem", str(memSablier), qos=1)
         print("k32/c1/leds/mem", str(memSablier))
+        
         
     else:
         time.sleep(.1)
