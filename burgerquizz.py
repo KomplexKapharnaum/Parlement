@@ -3,6 +3,10 @@ import liblo
 import time, sys
 from enum import Enum
 
+M32_IP = "10.0.100.18"
+
+buzzersCount = 5
+
 memSablier = 2
 
 class States(Enum):
@@ -12,6 +16,8 @@ class States(Enum):
     READY   = 4
     BUZZED  = 5
     CHRONO  = 6
+    STOP    = 7
+    OFF     = 8
 
 
 state = States.INIT
@@ -57,11 +63,11 @@ def on_message(client, userdata, message):
         # BUZZED    
         setState(States.BUZZED)
         leader = int(message.payload)
-        client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)
         m32_open(leader)
+        client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)
         print("k32/l"+str(leader)+"/leds/mem", "1")
         
-        for i in range(1,4):
+        for i in range(1,buzzersCount+1):
             if i != leader:
                 client.publish("k32/l"+str(i)+"/leds/mem", "0", qos=1)
                 m32_mute(i)
@@ -78,14 +84,20 @@ def on_message(client, userdata, message):
         if s == 0:                  # C16 @0 = Stop
             setState(States.START)
             
-        if s == 1: memSablier = 2   # C16 @1 = Speed 1m30
-        if s == 2: memSablier = 4   # C16 @2 = Speed 1m
-        if s == 3: memSablier = 5   # C16 @3 = Speed 0m30
+        if s == 1: memSablier = 2   # C16 @1 = Speed 45
+        if s == 2: memSablier = 4   # C16 @2 = Speed 30
+        if s == 3: memSablier = 5   # C16 @3 = Speed 18
+        if s == 4: memSablier = 6   # C16 @3 = Speed 9
+        if s == 5: memSablier = 7   # C16 @3 = Speed 3
+        
+    # QUIZZ OFF
+    if message.topic == "k32/c16/leds/stop":
+        setState(States.STOP)
         
 
 ######### OSC
 try:
-    m32 = liblo.Address("osc.udp://10.0.1.70:10023/")
+    m32 = liblo.Address("osc.udp://"+M32_IP+":10023/")
 except liblo.AddressError as err:
     print(err)
     time.sleep(3)
@@ -93,14 +105,17 @@ except liblo.AddressError as err:
     
 def m32_mute(ch=None):
     if ch:
-        liblo.send(m32, "/ch/"+str(ch)+"/mix/on", 0)
+        liblo.send(m32, "/ch/0"+str(ch)+"/mix/on", 0)
+        print('M32', M32_IP, "/ch/0"+str(ch)+"/mix/on", 0 )
     else:
-        liblo.send(m32, "/ch/1/mix/on", 0)
-        liblo.send(m32, "/ch/2/mix/on", 0)
-        liblo.send(m32, "/ch/3/mix/on", 0)
+        for i in range(1,buzzersCount+1):
+            liblo.send(m32, "/ch/0"+str(i)+"/mix/on", 0)
+            print('M32', M32_IP, "/ch/0"+str(i)+"/mix/on", 0 )
+        
         
 def m32_open(ch):
-    liblo.send(m32, "/ch/"+str(ch)+"/mix/on", 1)
+    liblo.send(m32, "/ch/0"+str(ch)+"/mix/on", 1)
+    print('M32', M32_IP, "/ch/0"+str(ch)+"/mix/on", 1 )
 
 
 ######### MAIN LOOP
@@ -124,6 +139,12 @@ while True:
         client.publish("k32/all/leds/mem", "0", qos=1)
         time.sleep(1)
         setState(States.READY)
+        
+    elif state == States.STOP:
+        m32_mute()
+        client.publish("k32/all/leds/mem", "0", qos=1)
+        time.sleep(1)
+        setState(States.OFF)
     
     elif state == States.BUZZED:
         # CHRONO
