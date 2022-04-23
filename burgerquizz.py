@@ -7,7 +7,7 @@ M32_IP = "10.0.100.18"
 
 buzzersCount = 5
 
-memSablier = 2
+memSablier = 5
 
 class States(Enum):
     INIT    = 1
