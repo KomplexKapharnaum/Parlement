@@ -7,7 +7,7 @@ M32_IP = "10.0.100.18"
 
 buzzersCount = 5
 
-memSablier = 5
+memSablier = 3
 
 class States(Enum):
     INIT    = 1
@@ -17,7 +17,8 @@ class States(Enum):
     BUZZED  = 5
     CHRONO  = 6
     STOP    = 7
-    OFF     = 8
+    BLACKOUT= 8
+    OFF     = 9
 
 
 state = States.INIT
@@ -38,6 +39,7 @@ def on_connect(client, userdata, flags, rc):
     print("Connected to MQTT broker ", mqttBroker)
     client.subscribe("k32/event/#")
     client.subscribe("k32/c16/#")
+    client.subscribe("k32/all/#")
     global state
     setState(States.START)
     
@@ -65,7 +67,7 @@ def on_message(client, userdata, message):
         leader = int(message.payload)
         m32_open(leader)
         client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)     # Leader -> white
-        print("k32/l"+str(leader)+"/leds/mem", "1")
+        print("k32/l"+str(leader)+"/leds/mem", "6")
         
         for i in range(1,buzzersCount+1):
             if i != leader:
@@ -74,26 +76,30 @@ def on_message(client, userdata, message):
                 print("k32/l"+str(i)+"/leds/mem", "0")
                         
     # END
-    if message.topic.startswith("k32/event/sablier") and state == States.CHRONO:
-        client.publish("k32/all/leds/mem", "2", qos=1) # RED breath
+    if state == States.CHRONO and message.topic.startswith("k32/event/sablier"):
+        client.publish("k32/all/leds/mem", "7", qos=1) # RED breath
         setState(States.READY)
         
     # QUIZZ CTRL
-    if message.topic == "k32/c16/leds/mem":
+    if message.topic == "k32/c16/leds/mem" or message.topic == "k32/all/leds/mem":
         s = int(message.payload)
         global memSablier
-        if s == 0:                  # C16 @0 = Stop
+        if s == 0 and state != States.STOP:                  # C16 @0 = Stop
             setState(States.START)
-            
-        if s == 1: memSablier = 3   # C16 @1 = Speed 45
-        if s == 2: memSablier = 4   # C16 @2 = Speed 30
-        if s == 3: memSablier = 5   # C16 @3 = Speed 18
-        if s == 4: memSablier = 6   # C16 @3 = Speed 9
-        if s == 5: memSablier = 7   # C16 @3 = Speed 3
+        
+        elif s > 0 and s < 6:
+            memSablier = s     
+            # C16 @1 = Speed 45
+            # C16 @2 = Speed 30
+            # C16 @3 = Speed 18
+            # C16 @4 = Speed 9
+            # C16 @5 = Speed 3
         
     # QUIZZ OFF
     if message.topic == "k32/c16/leds/stop":
         setState(States.STOP)
+    if message.topic == "k32/all/leds/stop":
+        setState(States.BLACKOUT)
         
 
 ######### OSC
@@ -141,9 +147,12 @@ while True:
         time.sleep(1)
         setState(States.READY)
         
-    elif state == States.STOP:
+    elif state == States.STOP or state == States.BLACKOUT:
         m32_mute()
-        client.publish("k32/all/leds/mem", "0", qos=1)
+        if state == States.STOP: 
+            client.publish("k32/all/leds/mem", "0", qos=1)
+        elif state == States.BLACKOUT: 
+            client.publish("k32/all/leds/stop", "", qos=1)
         time.sleep(1)
         setState(States.OFF)
     
