@@ -3,7 +3,8 @@ import liblo
 import time, sys
 from enum import Enum
 
-M32_IP = "10.0.100.18"
+M32_IP = "10.0.100.18:10023"
+MAC_IP = "10.0.100.20:12000"
 
 buzzersCount = 5
 
@@ -57,6 +58,7 @@ def on_publish(client, userdata, mid):
     pass
 
 def on_message(client, userdata, message):
+    global leader
     print("Received message '" + str(message.payload) + "' on topic '" + message.topic + "' with QoS " + str(message.qos))
     
     # BUZZ
@@ -65,8 +67,9 @@ def on_message(client, userdata, message):
         # BUZZED    
         setState(States.BUZZED)
         leader = int(message.payload)
+        buzz(leader, 1)
         m32_open(leader)
-        client.publish("k32/l"+str(leader)+"/leds/mem", "1", qos=1)     # Leader -> white
+        client.publish("k32/l"+str(leader)+"/leds/mem", "6", qos=1)     # Leader -> white
         print("k32/l"+str(leader)+"/leds/mem", "6")
         
         for i in range(1,buzzersCount+1):
@@ -74,10 +77,22 @@ def on_message(client, userdata, message):
                 client.publish("k32/l"+str(i)+"/leds/mem", "0", qos=1)  # Non-Leader -> blue 
                 m32_mute(i)
                 print("k32/l"+str(i)+"/leds/mem", "0")
+                
+    # UNBUZZ
+    if message.topic == "k32/event/unbuzz":
+        buzz(int(message.payload), 0)
                         
     # END
     if state == States.CHRONO and message.topic.startswith("k32/event/sablier"):
-        client.publish("k32/all/leds/mem", "7", qos=1) # RED breath
+        print('SABLIER !')
+        # client.publish("k32/all/leds/mem", "7", qos=1) # RED breath
+        for i in range(1,buzzersCount+1):               
+            if i != leader:
+                client.publish("k32/l"+str(i)+"/leds/mem", "7", qos=1)   # RED breath
+                print("k32/l"+str(i)+"/leds/mem", "7")
+            else:
+                client.publish("k32/l"+str(i)+"/leds/mem", "8", qos=1)   # RED breath with white panel
+                print("k32/l"+str(i)+"/leds/mem", "8")
         setState(States.READY)
         
     # QUIZZ CTRL
@@ -104,7 +119,8 @@ def on_message(client, userdata, message):
 
 ######### OSC
 try:
-    m32 = liblo.Address("osc.udp://"+M32_IP+":10023/")
+    m32 = liblo.Address("osc.udp://"+M32_IP+"/")
+    macintosh = liblo.Address("osc.udp://"+MAC_IP+"/")
 except liblo.AddressError as err:
     print(err)
     time.sleep(3)
@@ -123,9 +139,13 @@ def m32_mute(ch=None):
 def m32_open(ch):
     liblo.send(m32, "/ch/0"+str(ch)+"/mix/on", 1)
     print('M32', M32_IP, "/ch/0"+str(ch)+"/mix/on", 1 )
+    
+def buzz(who, how):
+    liblo.send(macintosh, "/1/push"+str(who), how)
+    print('BUZZ', MAC_IP, "/1/push"+str(who), how)
 
 
-######### MAIN LOOP
+######### MAIN LOOP 
 
 while True:
     if state == States.INIT:
